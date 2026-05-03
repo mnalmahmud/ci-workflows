@@ -1,0 +1,97 @@
+name: Build Linux (arm64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: "Target repository (owner/name)"
+        required: true
+      target_ref:
+        description: "Branch, tag, or SHA to build"
+        required: false
+        default: "main"
+      project_key:
+        description: "Project key (selects projects/<project_key>/)"
+        required: true
+      apply_patches:
+        description: "Apply patches from the project patch set"
+        required: false
+        type: boolean
+        default: true
+      patch_set:
+        description: "Patch set name (subdirectory under patches/)"
+        required: false
+        default: "default"
+      artifact_name:
+        description: "Name for the uploaded artifact"
+        required: false
+        default: "linux-arm64-artifacts"
+      flutter_channel:
+        description: "Flutter channel (stable/beta/master) — only used when USE_FLUTTER=true"
+        required: false
+        default: "stable"
+      flutter_version:
+        description: "Flutter version pin, e.g. 3.19.0 (or 'any')"
+        required: false
+        default: "any"
+
+jobs:
+  build-linux-arm64:
+    runs-on: ubuntu-24.04-arm  # ARM64 / aarch64 GitHub-hosted runner
+
+    env:
+      TARGET_REPO:       ${{ inputs.target_repo }}
+      TARGET_REF:        ${{ inputs.target_ref }}
+      PROJECT_KEY:       ${{ inputs.project_key }}
+      PATCH_SET:         ${{ inputs.patch_set }}
+      FLUTTER_CHANNEL:   ${{ inputs.flutter_channel }}
+      FLUTTER_VERSION:   ${{ inputs.flutter_version }}
+      ARTIFACT_NAME:     ${{ inputs.artifact_name }}
+      TARGET_DIR:        work/target
+      PACKAGE_DIR:       work/artifacts
+      PACKAGE_TAR:       "true"
+      TARGET_REPO_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+
+    steps:
+      # ── 1. Checkout orchestrator repo ───────────────────────────────────────
+      - name: Checkout orchestrator repo
+        uses: actions/checkout@v4
+
+      # ── 2. Restore Flutter/pub cache (optional) ──────────────────────────────
+      - name: Restore Flutter/pub cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ~/flutter
+          key: flutter-${{ inputs.project_key }}-${{ inputs.flutter_channel }}-${{ inputs.flutter_version }}-${{ runner.os }}-arm64
+          restore-keys: |
+            flutter-${{ inputs.project_key }}-${{ inputs.flutter_channel }}-${{ runner.os }}-arm64
+
+      # ── 3. Checkout target repository ───────────────────────────────────────
+      - name: Checkout target repository
+        run: bash scripts/checkout_target.sh
+
+      # ── 4. Apply patches (optional) ─────────────────────────────────────────
+      - name: Apply patches
+        if: ${{ inputs.apply_patches == true }}
+        run: bash scripts/apply_patches.sh
+
+      # ── 5. Run Linux build ───────────────────────────────────────────────────
+      # APT_PACKAGES_LINUX (from project.env) is handled inside run_build.sh
+      - name: Run build (linux)
+        run: bash scripts/run_build.sh linux
+
+      # ── 6. Package artifacts into .tar.gz ────────────────────────────────────
+      - name: Package artifacts
+        run: bash scripts/package_artifacts.sh
+
+      # ── 7. Upload artifacts ──────────────────────────────────────────────────
+      - name: Upload Linux arm64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: |
+            work/artifacts/
+            ${{ inputs.artifact_name }}.tar.gz
+          if-no-files-found: warn
