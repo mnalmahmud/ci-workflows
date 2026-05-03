@@ -74,3 +74,25 @@ The workflows use `secrets.TARGET_REPO_TOKEN` when the secret is set.
 For public repos no token is needed.
 Add a repository secret named `TARGET_REPO_TOKEN` with a PAT that has
 `repo` scope to enable private-repo access.
+
+---
+
+## Android signing secrets
+
+To produce a **signed** APK or AAB add these three repository secrets:
+
+| Secret | What to put there |
+|---|---|
+| `KEYSTORE_BASE64` | Your `.jks` / `.keystore` file encoded as Base64 (`base64 < release.jks`) |
+| `KEYSTORE_ALIAS` | The key alias inside the keystore |
+| `KEYSTORE_PASSWORD` | The keystore password (also used as the key password) |
+
+When those secrets are present the workflow:
+
+1. Decodes the keystore to `/tmp/keystore.jks`
+2. Exports `ANDROID_KEYSTORE_PATH`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `ANDROID_STORE_PASSWORD` into the job environment
+3. Writes `android/key.properties` in the target working tree (the standard Flutter / Gradle convention)
+
+Your build command can then sign without extra flags if it reads `key.properties`, or reference the env vars directly — see `projects/example-owner-repo/project.env` for examples.
+
+When the secrets are **not** configured the signing step is skipped and an unsigned build is produced.

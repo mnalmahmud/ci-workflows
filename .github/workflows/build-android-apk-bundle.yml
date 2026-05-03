@@ -85,6 +85,25 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # ── 3.5 Set up Android signing ───────────────────────────────────────────
+      # Runs only when the KEYSTORE_BASE64 secret is configured.
+      # Exports ANDROID_KEYSTORE_PATH, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD,
+      # and ANDROID_STORE_PASSWORD into the environment for use by the build.
+      - name: Set up Android signing
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_ALIAS:  ${{ secrets.KEYSTORE_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          echo "[signing] Decoding keystore…"
+          echo "${KEYSTORE_BASE64}" | base64 -d > /tmp/keystore.jks
+          echo "ANDROID_KEYSTORE_PATH=/tmp/keystore.jks" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=${KEYSTORE_ALIAS}"      >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=${KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
+          echo "ANDROID_STORE_PASSWORD=${KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
+          echo "[signing] Keystore ready at /tmp/keystore.jks"
+
       # ── 4. Checkout target repository ───────────────────────────────────────
       - name: Checkout target repository
         run: bash scripts/checkout_target.sh

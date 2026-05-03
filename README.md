@@ -136,6 +136,32 @@ For **private** repositories:
 
 ---
 
+## Android signing
+
+To produce a **signed** APK or AAB, add these three secrets to this repository
+(**Settings → Secrets and variables → Actions → New repository secret**):
+
+| Secret name | Value |
+|---|---|
+| `KEYSTORE_BASE64` | Your `.jks` / `.keystore` file Base64-encoded: `base64 < release.jks` |
+| `KEYSTORE_ALIAS` | The key alias inside the keystore |
+| `KEYSTORE_PASSWORD` | Keystore password (also used as the key password) |
+
+**How it works:**
+
+1. The "Set up Android signing" workflow step decodes `KEYSTORE_BASE64` → `/tmp/keystore.jks`.
+2. It exports `ANDROID_KEYSTORE_PATH`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, and `ANDROID_STORE_PASSWORD` into the job environment.
+3. `run_build.sh` writes `android/key.properties` in the target source tree — the file that Flutter and standard Gradle signing configs read automatically.
+
+When the secrets are **not** configured the signing step is skipped and an unsigned build is produced.
+
+For projects that don't use `key.properties` you can reference the env vars
+directly in `BUILD_CMD_ANDROID_APK` — see the signing section in
+[`projects/example-owner-repo/project.env`](projects/example-owner-repo/project.env)
+for examples.
+
+---
+
 ## Repository structure
 
 ```
@@ -151,9 +177,9 @@ ci-workflows/
 │   ├── run_build.sh                   # Load config + run build
 │   └── package_artifacts.sh           # Stage & optionally tar artifacts
 ├── projects/
-│   ├── README.md                      # Project config reference
-│   └── example/
-│       ├── project.env                # Example / template config
+│   ├── README.md                           # Project config reference
+│   └── example-owner-repo/
+│       ├── project.env                     # Example / template config
 │       └── patches/default/.gitkeep
 └── README.md
 ```
