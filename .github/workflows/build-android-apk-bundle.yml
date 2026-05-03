@@ -1,4 +1,4 @@
-name: Build Android APK Bundle (AAB)
+name: Build Android App Bundle (AAB)
 
 on:
   workflow_dispatch:

@@ -67,7 +67,7 @@ Builds an APK using the command defined in `BUILD_CMD_ANDROID_APK` (or
 
 ### Android App Bundle (AAB)
 
-Workflow: **`.github/workflows/build-android-apk-bundle.yml`**
+Workflow: **`.github/workflows/build-android-apk-bundle.yml`** (builds an AAB — Android App Bundle, the upload format for Google Play)
 
 Builds an AAB using `BUILD_CMD_ANDROID_AAB` (or `BUILD_CMD_ANDROID` fallback).
 
