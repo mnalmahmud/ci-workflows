@@ -19,8 +19,9 @@ GitHub Actions configuration in the target repositories themselves.
 3. [Adding a new project](#adding-a-new-project)
 4. [Patch sets](#patch-sets)
 5. [Authentication for private repos](#authentication-for-private-repos)
-6. [Repository structure](#repository-structure)
-7. [Scripts reference](#scripts-reference)
+6. [Android signing](#android-signing)
+7. [Repository structure](#repository-structure)
+8. [Scripts reference](#scripts-reference)
 
 ---
 
@@ -51,12 +52,13 @@ Run workflow**.
 |---|---|---|---|
 | `target_repo` | ✅ | — | `owner/name` of the repo to build |
 | `target_ref` | | `main` | Branch, tag, or SHA |
-| `project_key` | ✅ | — | Selects `projects/<project_key>/` |
+| `project_key` | ✅ | — | Selects `projects/<project_key>/` — use `username-reponame` format |
 | `apply_patches` | | `true` | Apply the configured patch set |
 | `patch_set` | | `default` | Patch set sub-directory name |
 | `artifact_name` | | varies | Name of the uploaded artifact |
-| `flutter_channel` | | `stable` | Flutter channel (ignored unless `USE_FLUTTER=true`) |
-| `flutter_version` | | `any` | Flutter version pin (ignored unless `USE_FLUTTER=true`) |
+| `use_flutter` | | `false` | Set up Flutter via `subosito/flutter-action` before building |
+| `flutter_channel` | | `stable` | Flutter channel (used when `use_flutter=true`) |
+| `flutter_version` | | `any` | Flutter version pin, e.g. `3.24.0` (used when `use_flutter=true`) |
 
 ### Android APK
 
@@ -87,12 +89,15 @@ Runs on `ubuntu-24.04-arm` (AArch64). Artifacts are packaged into a `.tar.gz`.
 
 ## Adding a new project
 
+**Project key convention:** replace the `/` in `owner/name` with `-`.
+Example: `acme/my-app` → project key `acme-my-app`.
+
 ```bash
 # 1. Create config directory
 mkdir -p projects/<project_key>/patches/default
 
 # 2. Copy and customise the example config
-cp projects/example/project.env projects/<project_key>/project.env
+cp projects/example-owner-repo/project.env projects/<project_key>/project.env
 $EDITOR projects/<project_key>/project.env
 
 # 3. (Optional) Add .patch files
@@ -143,13 +148,13 @@ To produce a **signed** APK or AAB, add these three secrets to this repository
 
 | Secret name | Value |
 |---|---|
-| `KEYSTORE_BASE64` | Your `.jks` / `.keystore` file Base64-encoded: `base64 < release.jks` |
-| `KEYSTORE_ALIAS` | The key alias inside the keystore |
-| `KEYSTORE_PASSWORD` | Keystore password (also used as the key password) |
+| `ANDROID_KEYSTORE_BASE64` | Your `.jks` / `.keystore` file Base64-encoded: `base64 < release.jks` |
+| `ANDROID_KEYSTORE_ALIAS` | The key alias inside the keystore |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password (also used as the key password) |
 
 **How it works:**
 
-1. The "Set up Android signing" workflow step decodes `KEYSTORE_BASE64` → `/tmp/keystore.jks`.
+1. The "Set up Android signing" workflow step decodes `ANDROID_KEYSTORE_BASE64` → `/tmp/keystore.jks`.
 2. It exports `ANDROID_KEYSTORE_PATH`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, and `ANDROID_STORE_PASSWORD` into the job environment.
 3. `run_build.sh` writes `android/key.properties` in the target source tree — the file that Flutter and standard Gradle signing configs read automatically.
 

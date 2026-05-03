@@ -11,7 +11,7 @@ on:
         required: false
         default: "main"
       project_key:
-        description: "Project key (selects projects/<project_key>/)"
+        description: "Project key — use username-reponame format (selects projects/<project_key>/)"
         required: true
       apply_patches:
         description: "Apply patches from the project patch set"
@@ -26,18 +26,28 @@ on:
         description: "Name for the uploaded artifact"
         required: false
         default: "android-aab-artifacts"
+      use_flutter:
+        description: "Set up Flutter toolchain before building (uses subosito/flutter-action)"
+        required: false
+        type: boolean
+        default: false
       flutter_channel:
-        description: "Flutter channel (stable/beta/master) — only used when USE_FLUTTER=true"
+        description: "Flutter channel (stable/beta/master)"
         required: false
         default: "stable"
       flutter_version:
-        description: "Flutter version pin, e.g. 3.19.0 (or 'any')"
+        description: "Flutter version pin, e.g. 3.24.0 (or 'any' for latest on channel)"
         required: false
         default: "any"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.project_key }}-${{ inputs.target_repo }}
+  cancel-in-progress: true
 
 jobs:
   build-android-aab:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     env:
       TARGET_REPO:       ${{ inputs.target_repo }}
@@ -57,7 +67,7 @@ jobs:
       - name: Checkout orchestrator repo
         uses: actions/checkout@v4
 
-      # ── 2. Restore caches ───────────────────────────────────────────────────
+      # ── 2. Restore Gradle cache ──────────────────────────────────────────────
       - name: Restore Gradle cache
         uses: actions/cache@v4
         with:
@@ -68,60 +78,60 @@ jobs:
           restore-keys: |
             gradle-${{ inputs.project_key }}-${{ runner.os }}-
 
-      - name: Restore Flutter/pub cache
-        uses: actions/cache@v4
+      # ── 3. Set up Flutter (optional) ────────────────────────────────────────
+      # Enabled when use_flutter=true. Handles SDK download, PATH, and caching.
+      - name: Set up Flutter
+        if: ${{ inputs.use_flutter == true }}
+        uses: subosito/flutter-action@v2
         with:
-          path: |
-            ~/.pub-cache
-            ~/flutter
-          key: flutter-${{ inputs.project_key }}-${{ inputs.flutter_channel }}-${{ inputs.flutter_version }}-${{ runner.os }}
-          restore-keys: |
-            flutter-${{ inputs.project_key }}-${{ inputs.flutter_channel }}-
+          channel: ${{ inputs.flutter_channel }}
+          flutter-version: ${{ inputs.flutter_version != 'any' && inputs.flutter_version || '' }}
+          cache: true
 
-      # ── 3. Set up Java for Android builds ───────────────────────────────────
+      # ── 4. Set up JDK 17 ────────────────────────────────────────────────────
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      # ── 3.5 Set up Android signing ───────────────────────────────────────────
-      # Runs only when the KEYSTORE_BASE64 secret is configured.
+      # ── 5. Set up Android signing ────────────────────────────────────────────
+      # Runs only when the ANDROID_KEYSTORE_BASE64 secret is configured.
       # Exports ANDROID_KEYSTORE_PATH, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD,
       # and ANDROID_STORE_PASSWORD into the environment for use by the build.
       - name: Set up Android signing
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_ALIAS:  ${{ secrets.KEYSTORE_ALIAS }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_ALIAS:  ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           echo "[signing] Decoding keystore…"
-          echo "${KEYSTORE_BASE64}" | base64 -d > /tmp/keystore.jks
-          echo "ANDROID_KEYSTORE_PATH=/tmp/keystore.jks" >> "$GITHUB_ENV"
-          echo "ANDROID_KEY_ALIAS=${KEYSTORE_ALIAS}"      >> "$GITHUB_ENV"
-          echo "ANDROID_KEY_PASSWORD=${KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
-          echo "ANDROID_STORE_PASSWORD=${KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > /tmp/keystore.jks
+          echo "ANDROID_KEYSTORE_PATH=/tmp/keystore.jks"            >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=${ANDROID_KEYSTORE_ALIAS}"        >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=${ANDROID_KEYSTORE_PASSWORD}"  >> "$GITHUB_ENV"
+          echo "ANDROID_STORE_PASSWORD=${ANDROID_KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
           echo "[signing] Keystore ready at /tmp/keystore.jks"
 
-      # ── 4. Checkout target repository ───────────────────────────────────────
+      # ── 6. Checkout target repository ───────────────────────────────────────
       - name: Checkout target repository
         run: bash scripts/checkout_target.sh
 
-      # ── 5. Apply patches (optional) ─────────────────────────────────────────
+      # ── 7. Apply patches (optional) ─────────────────────────────────────────
       - name: Apply patches
         if: ${{ inputs.apply_patches == true }}
         run: bash scripts/apply_patches.sh
 
-      # ── 6. Run Android AAB build ─────────────────────────────────────────────
+      # ── 8. Run Android AAB build ─────────────────────────────────────────────
       - name: Run build (android aab)
         run: bash scripts/run_build.sh android
 
-      # ── 7. Package artifacts ─────────────────────────────────────────────────
+      # ── 9. Package artifacts ─────────────────────────────────────────────────
       - name: Package artifacts
         run: bash scripts/package_artifacts.sh
 
-      # ── 8. Upload artifacts ──────────────────────────────────────────────────
+      # ── 10. Upload artifacts ─────────────────────────────────────────────────
       - name: Upload AAB artifacts
         uses: actions/upload-artifact@v4
         with:

@@ -4,6 +4,10 @@ This directory holds per-project build configuration. Each subdirectory
 corresponds to a **project key** that you supply as the `project_key` input
 when triggering a workflow.
 
+> **Convention:** use `username-reponame` as the project key — replace the `/`
+> in the GitHub `owner/name` with `-`.
+> Example: repo `acme/my-app` → project key `acme-my-app`.
+
 ```
 projects/
 └── <project_key>/
@@ -27,7 +31,7 @@ projects/
 2. **Copy the example config and customise it**
 
    ```bash
-   cp projects/example/project.env projects/<project_key>/project.env
+   cp projects/example-owner-repo/project.env projects/<project_key>/project.env
    # Edit the new file to set your build commands, artifact globs, etc.
    ```
 
@@ -83,9 +87,9 @@ To produce a **signed** APK or AAB add these three repository secrets:
 
 | Secret | What to put there |
 |---|---|
-| `KEYSTORE_BASE64` | Your `.jks` / `.keystore` file encoded as Base64 (`base64 < release.jks`) |
-| `KEYSTORE_ALIAS` | The key alias inside the keystore |
-| `KEYSTORE_PASSWORD` | The keystore password (also used as the key password) |
+| `ANDROID_KEYSTORE_BASE64` | Your `.jks` / `.keystore` file encoded as Base64 (`base64 < release.jks`) |
+| `ANDROID_KEYSTORE_ALIAS` | The key alias inside the keystore |
+| `ANDROID_KEYSTORE_PASSWORD` | The keystore password (also used as the key password) |
 
 When those secrets are present the workflow:
 

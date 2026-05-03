@@ -11,7 +11,7 @@ on:
         required: false
         default: "main"
       project_key:
-        description: "Project key (selects projects/<project_key>/)"
+        description: "Project key — use username-reponame format (selects projects/<project_key>/)"
         required: true
       apply_patches:
         description: "Apply patches from the project patch set"
@@ -26,18 +26,28 @@ on:
         description: "Name for the uploaded artifact"
         required: false
         default: "linux-arm64-artifacts"
+      use_flutter:
+        description: "Set up Flutter toolchain before building (uses subosito/flutter-action)"
+        required: false
+        type: boolean
+        default: false
       flutter_channel:
-        description: "Flutter channel (stable/beta/master) — only used when USE_FLUTTER=true"
+        description: "Flutter channel (stable/beta/master)"
         required: false
         default: "stable"
       flutter_version:
-        description: "Flutter version pin, e.g. 3.19.0 (or 'any')"
+        description: "Flutter version pin, e.g. 3.24.0 (or 'any' for latest on channel)"
         required: false
         default: "any"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.project_key }}-${{ inputs.target_repo }}
+  cancel-in-progress: true
 
 jobs:
   build-linux-arm64:
     runs-on: ubuntu-24.04-arm  # ARM64 / aarch64 GitHub-hosted runner
+    timeout-minutes: 60
 
     env:
       TARGET_REPO:       ${{ inputs.target_repo }}
@@ -57,16 +67,15 @@ jobs:
       - name: Checkout orchestrator repo
         uses: actions/checkout@v4
 
-      # ── 2. Restore Flutter/pub cache (optional) ──────────────────────────────
-      - name: Restore Flutter/pub cache
-        uses: actions/cache@v4
+      # ── 2. Set up Flutter (optional) ────────────────────────────────────────
+      # Enabled when use_flutter=true. Handles SDK download, PATH, and caching.
+      - name: Set up Flutter
+        if: ${{ inputs.use_flutter == true }}
+        uses: subosito/flutter-action@v2
         with:
-          path: |
-            ~/.pub-cache
-            ~/flutter
-          key: flutter-${{ inputs.project_key }}-${{ inputs.flutter_channel }}-${{ inputs.flutter_version }}-${{ runner.os }}-arm64
-          restore-keys: |
-            flutter-${{ inputs.project_key }}-${{ inputs.flutter_channel }}-${{ runner.os }}-arm64
+          channel: ${{ inputs.flutter_channel }}
+          flutter-version: ${{ inputs.flutter_version != 'any' && inputs.flutter_version || '' }}
+          cache: true
 
       # ── 3. Checkout target repository ───────────────────────────────────────
       - name: Checkout target repository

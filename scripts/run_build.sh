@@ -8,14 +8,16 @@
 #   platform  – "android" or "linux"
 #
 # Environment variables (set by the workflow):
-#   PROJECT_KEY          – Key that maps to projects/<PROJECT_KEY>/project.env
-#   BUILD_VARIANT        – Optional variant: "apk" or "aab" (android only)
-#   FLUTTER_CHANNEL      – Flutter channel (default: stable); ignored unless USE_FLUTTER=true
-#   FLUTTER_VERSION      – Flutter version pin (default: any); ignored unless USE_FLUTTER=true
-#   ANDROID_KEYSTORE_PATH  – Absolute path to the decoded .jks file (set by the signing step)
-#   ANDROID_KEY_ALIAS      – Key alias inside the keystore
-#   ANDROID_KEY_PASSWORD   – Key password
-#   ANDROID_STORE_PASSWORD – Keystore store password (same as key password by convention)
+#   PROJECT_KEY              – Key that maps to projects/<PROJECT_KEY>/project.env
+#   BUILD_VARIANT            – Optional variant: "apk" or "aab" (android only)
+#   FLUTTER_CHANNEL          – Flutter channel (default: stable); only used when
+#                              USE_FLUTTER=true AND flutter is not already on PATH
+#   FLUTTER_VERSION          – Flutter version pin (default: any); only used when
+#                              USE_FLUTTER=true AND flutter is not already on PATH
+#   ANDROID_KEYSTORE_PATH    – Absolute path to the decoded .jks file (set by the signing step)
+#   ANDROID_KEY_ALIAS        – Key alias inside the keystore
+#   ANDROID_KEY_PASSWORD     – Key password
+#   ANDROID_STORE_PASSWORD   – Keystore store password (same as key password by convention)
 #
 # After running this script ARTIFACT_GLOBS is written to $GITHUB_ENV (when
 # available) so subsequent workflow steps can reference it.
@@ -94,23 +96,29 @@ fi
 # ── Flutter / Dart toolchain setup ────────────────────────────────────────────
 USE_FLUTTER="${USE_FLUTTER:-false}"
 if [[ "${USE_FLUTTER}" == "true" ]]; then
-  echo "[run_build] Setting up Flutter (channel=${FLUTTER_CHANNEL}, version=${FLUTTER_VERSION})"
+  if command -v flutter &>/dev/null; then
+    # Flutter was already set up by subosito/flutter-action in the workflow step
+    echo "[run_build] Flutter already on PATH: $(flutter --version | head -1)"
+  else
+    # Fallback: manual installation via git clone
+    echo "[run_build] Setting up Flutter via git clone (channel=${FLUTTER_CHANNEL}, version=${FLUTTER_VERSION})"
 
-  FLUTTER_ROOT="${HOME}/flutter"
+    FLUTTER_ROOT="${HOME}/flutter"
 
-  if [[ ! -d "${FLUTTER_ROOT}" ]]; then
-    git clone --depth=1 --branch "${FLUTTER_CHANNEL}" \
-      https://github.com/flutter/flutter.git "${FLUTTER_ROOT}"
+    if [[ ! -d "${FLUTTER_ROOT}" ]]; then
+      git clone --depth=1 --branch "${FLUTTER_CHANNEL}" \
+        https://github.com/flutter/flutter.git "${FLUTTER_ROOT}"
+    fi
+
+    export PATH="${FLUTTER_ROOT}/bin:${PATH}"
+
+    if [[ "${FLUTTER_VERSION}" != "any" ]]; then
+      flutter version "${FLUTTER_VERSION}" --no-force-upgrade || true
+    fi
+
+    flutter doctor --android-licenses <<< "y" || true
+    flutter doctor -v || echo "[run_build] flutter doctor reported warnings (non-fatal)"
   fi
-
-  export PATH="${FLUTTER_ROOT}/bin:${PATH}"
-
-  if [[ "${FLUTTER_VERSION}" != "any" ]]; then
-    flutter version "${FLUTTER_VERSION}" --no-force-upgrade || true
-  fi
-
-  flutter doctor --android-licenses <<< "y" || true
-  flutter doctor -v
 fi
 
 # ── Android SDK / Gradle env (only when platform is android) ──────────────────
@@ -121,6 +129,9 @@ if [[ "${PLATFORM}" == "android" ]]; then
   # ── Android signing ──────────────────────────────────────────────────────────
   # When the workflow's "Set up Android signing" step ran it exports:
   #   ANDROID_KEYSTORE_PATH, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD, ANDROID_STORE_PASSWORD
+  #
+  # These are set from the ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_ALIAS, and
+  # ANDROID_KEYSTORE_PASSWORD repository secrets.
   #
   # We write android/key.properties so that Flutter and Gradle projects that
   # follow the standard key.properties convention pick up signing automatically
